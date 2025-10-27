@@ -12,7 +12,7 @@ My playground to work with Minimal APIs
 ## TODO: Improvements & Additions
 
  - Auth
-- mapper
+- mapper vs struct
 
 ### Architecture & Structure
 
