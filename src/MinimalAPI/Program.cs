@@ -101,10 +101,60 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Configure Swagger/OpenAPI documentation
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "Minimal API",
+        Version = "v1",
+        Description = "A comprehensive enterprise-grade .NET 9.0 Minimal API template with JWT authentication, validation, exception handling, and more."
+    });
+
+    // Configure JWT Bearer authentication in Swagger
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\"",
+        Name = "Authorization",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header
+    });
+
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] { }
+        }
+    });
+});
+
 var app = builder.Build();
 
 // Global exception handling (must be first)
 app.UseGlobalExceptionHandling();
+
+// Configure Swagger/OpenAPI UI (development only)
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Minimal API v1");
+        options.RoutePrefix = string.Empty; // Serve Swagger UI at root
+        options.DocumentTitle = "Minimal API - OpenAPI Documentation";
+    });
+}
 
 // Use CORS middleware
 app.UseCors(corsSettings.PolicyName);

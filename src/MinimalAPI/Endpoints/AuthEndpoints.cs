@@ -15,8 +15,10 @@ public static class AuthEndpoints
 
         group.MapPost("/login", Login)
             .WithName("Login")
-            .Produces<AuthResponse>(StatusCodes.Status200OK)
-            .Produces<AuthResponse>(StatusCodes.Status401Unauthorized);
+            .WithDescription("Authenticate user with username and password to obtain a JWT token")
+            .Produces<AuthResponse>(StatusCodes.Status200OK, contentType: "application/json")
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized);
     }
 
     private static async Task<IResult> Login(

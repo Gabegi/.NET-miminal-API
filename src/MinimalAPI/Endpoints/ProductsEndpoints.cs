@@ -10,18 +10,46 @@ public static class ProductsEndpoints
 {
     public static void MapProducts(this WebApplication app)
     {
-        var group = app.MapGroup("/products");
+        var group = app.MapGroup("/products")
+            .WithTags("Products");
 
-        group.MapGet("/", GetAllProducts);
-        group.MapGet("/{id}", GetProductById);
+        group.MapGet("/", GetAllProducts)
+            .WithName("GetAllProducts")
+            .WithDescription("Retrieve all products from the catalog")
+            .Produces<List<Product>>(StatusCodes.Status200OK);
+
+        group.MapGet("/{id}", GetProductById)
+            .WithName("GetProductById")
+            .WithDescription("Retrieve a specific product by ID")
+            .Produces<Product>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapPost("/", CreateProduct)
+            .WithName("CreateProduct")
+            .WithDescription("Create a new product (requires authentication)")
             .WithValidation<CreateProductRequest>()
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .Produces<Product>(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         group.MapPut("/{id}", UpdateProduct)
+            .WithName("UpdateProduct")
+            .WithDescription("Update an existing product (requires authentication)")
             .WithValidation<UpdateProductRequest>()
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .Produces<Product>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapDelete("/{id}", DeleteProduct)
-            .RequireAuthorization("AdminOnly");
+            .WithName("DeleteProduct")
+            .WithDescription("Delete a product (requires Admin role)")
+            .RequireAuthorization("AdminOnly")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
     }
 
     private static async Task<IResult> GetAllProducts(IRepository<Product> repository)
