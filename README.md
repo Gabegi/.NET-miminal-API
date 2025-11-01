@@ -1,6 +1,5 @@
 # .NET_MiminalAPI
-
-Minimal APIs
+A project to play with Minimal APIs
 
 # Create projects
 
@@ -11,6 +10,9 @@ dotnet new web nameofproject
 My playground to work with Minimal APIs
 
 ## TODO: Improvements & Additions
+
+ - Auth
+- mapper vs struct
 
 ### Architecture & Structure
 
