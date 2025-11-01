@@ -16,7 +16,7 @@ public abstract class ProductRequestValidator<T> : AbstractValidator<T> where T 
         RuleFor(x => x.Price)
             .GreaterThan(0).WithMessage("Price must be greater than 0")
             .LessThan(1000000).WithMessage("Price must be less than 1,000,000")
-            .ScalePrecision(2, 18).WithMessage("Price must have at most 2 decimal places");
+            .PrecisionScale(18, 2, true).WithMessage("Price must have at most 2 decimal places");
 
         RuleFor(x => x.Description)
             .MaximumLength(500).WithMessage("Description must not exceed 500 characters");
