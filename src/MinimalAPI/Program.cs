@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using MinimalAPI.Configuration;
 using MinimalAPI.Endpoints;
+using MinimalAPI.Extensions;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -101,6 +102,9 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Global exception handling (must be first)
+app.UseGlobalExceptionHandling();
 
 // Use CORS middleware
 app.UseCors(corsSettings.PolicyName);
