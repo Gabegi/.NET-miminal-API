@@ -1,5 +1,5 @@
-using EShop.Core.Entities;
-using Infrastructure;
+using Infrastructure.Entities;
+using Infrastructure.Repositories;
 using MinimalAPI.Extensions;
 using MinimalAPI.Models.Requests;
 
@@ -11,39 +11,61 @@ public static class CustomersEndpoints
     {
         var group = app.MapGroup("/customers");
 
-        group.MapGet("/", (ICustomerRepository customerRepo) => customerRepo.GetAll());
+        group.MapGet("/", GetAllCustomers);
+        group.MapGet("/{id}", GetCustomerById);
+        group.MapPost("/", CreateCustomer).WithValidation<CreateCustomerRequest>();
+        group.MapPut("/{id}", UpdateCustomer).WithValidation<UpdateCustomerRequest>();
+        group.MapDelete("/{id}", DeleteCustomer);
+    }
 
-        group.MapGet("/{id}", (int id, ICustomerRepository customerRepo) =>
+    private static async Task<IResult> GetAllCustomers(IRepository<Customer> repository)
+    {
+        var customers = await repository.GetAllAsync();
+        return Results.Ok(customers);
+    }
+
+    private static async Task<IResult> GetCustomerById(int id, IRepository<Customer> repository)
+    {
+        var customer = await repository.GetByIdAsync(id);
+        return customer is not null ? Results.Ok(customer) : Results.NotFound();
+    }
+
+    private static async Task<IResult> CreateCustomer(CreateCustomerRequest request, IRepository<Customer> repository)
+    {
+        var customer = new Customer
         {
-            var customer = customerRepo.GetById(id);
-            return customer is not null ? Results.Ok(customer) : Results.NotFound();
-        });
+            Name = request.Name,
+            Email = request.Email
+        };
 
-        group.MapPost("/", (CreateCustomerRequest request, ICustomerRepository customerRepo) =>
-        {
-            var customer = new Customer
-            {
-                Name = request.Name,
-                Email = request.Email
-            };
-            var created = customerRepo.Add(customer);
-            return Results.Created($"/customers/{created.Id}", created);
-        })
-        .WithValidation<CreateCustomerRequest>();
+        await repository.AddAsync(customer);
+        await repository.SaveChangesAsync();
 
-        group.MapPut("/{id}", (int id, UpdateCustomerRequest request, ICustomerRepository customerRepo) =>
-        {
-            var customer = new Customer
-            {
-                Id = id,
-                Name = request.Name,
-                Email = request.Email
-            };
-            return customerRepo.Update(customer) ? Results.Ok(customer) : Results.NotFound();
-        })
-        .WithValidation<UpdateCustomerRequest>();
+        return Results.Created($"/customers/{customer.Id}", customer);
+    }
 
-        group.MapDelete("/{id}", (int id, ICustomerRepository customerRepo) =>
-            customerRepo.Delete(id) ? Results.NoContent() : Results.NotFound());
+    private static async Task<IResult> UpdateCustomer(int id, UpdateCustomerRequest request, IRepository<Customer> repository)
+    {
+        var customer = await repository.GetByIdAsync(id);
+        if (customer is null)
+            return Results.NotFound();
+
+        customer.Name = request.Name;
+        customer.Email = request.Email;
+
+        await repository.UpdateAsync(customer);
+        await repository.SaveChangesAsync();
+
+        return Results.Ok(customer);
+    }
+
+    private static async Task<IResult> DeleteCustomer(int id, IRepository<Customer> repository)
+    {
+        var deleted = await repository.RemoveAsync(id);
+        if (!deleted)
+            return Results.NotFound();
+
+        await repository.SaveChangesAsync();
+        return Results.NoContent();
     }
 }

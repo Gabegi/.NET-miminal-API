@@ -1,6 +1,7 @@
 using FluentValidation;
-using Infrastructure;
 using Infrastructure.Data;
+using Infrastructure.Entities;
+using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using MinimalAPI.Endpoints;
 
@@ -10,10 +11,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Register repositories
-builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
-builder.Services.AddScoped<IOrderRepository, OrderRepository>();
-builder.Services.AddScoped<IRandomProductRepository, RandomProductRepository>();
+// Register generic repositories
+builder.Services.AddScoped<IRepository<Product>, Repository<Product>>();
+builder.Services.AddScoped<IRepository<Customer>, Repository<Customer>>();
+builder.Services.AddScoped<IRepository<Order>, Repository<Order>>();
 
 // Register validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();

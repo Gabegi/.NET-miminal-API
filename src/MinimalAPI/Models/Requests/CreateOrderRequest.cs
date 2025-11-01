@@ -1,4 +1,4 @@
-using EShop.Core.Entities;
+using Infrastructure.Entities;
 
 namespace MinimalAPI.Models.Requests;
 

@@ -1,5 +1,5 @@
-﻿using Core.Entities;
-using Infrastructure;
+﻿using Infrastructure.Entities;
+using Infrastructure.Repositories;
 using MinimalAPI.Extensions;
 using MinimalAPI.Models.Requests;
 
@@ -11,41 +11,63 @@ public static class ProductsEndpoints
     {
         var group = app.MapGroup("/products");
 
-        group.MapGet("/", (IRandomProductRepository productRepo) => productRepo.GetAll());
+        group.MapGet("/", GetAllProducts);
+        group.MapGet("/{id}", GetProductById);
+        group.MapPost("/", CreateProduct).WithValidation<CreateProductRequest>();
+        group.MapPut("/{id}", UpdateProduct).WithValidation<UpdateProductRequest>();
+        group.MapDelete("/{id}", DeleteProduct);
+    }
 
-        group.MapGet("/{id}", (int id, IRandomProductRepository productRepo) =>
+    private static async Task<IResult> GetAllProducts(IRepository<Product> repository)
+    {
+        var products = await repository.GetAllAsync();
+        return Results.Ok(products);
+    }
+
+    private static async Task<IResult> GetProductById(int id, IRepository<Product> repository)
+    {
+        var product = await repository.GetByIdAsync(id);
+        return product is not null ? Results.Ok(product) : Results.NotFound();
+    }
+
+    private static async Task<IResult> CreateProduct(CreateProductRequest request, IRepository<Product> repository)
+    {
+        var product = new Product
         {
-            var product = productRepo.GetById(id);
-            return product is not null ? Results.Ok(product) : Results.NotFound();
-        });
+            Name = request.Name,
+            Description = request.Description,
+            Price = request.Price
+        };
 
-        group.MapPost("/", (CreateProductRequest request, IRandomProductRepository productRepo) =>
-        {
-            var product = new Product
-            {
-                Name = request.Name,
-                Description = request.Description,
-                Price = request.Price
-            };
-            var created = productRepo.Add(product);
-            return Results.Created($"/products/{created.Id}", created);
-        })
-        .WithValidation<CreateProductRequest>();
+        await repository.AddAsync(product);
+        await repository.SaveChangesAsync();
 
-        group.MapPut("/{id}", (int id, UpdateProductRequest request, IRandomProductRepository productRepo) =>
-        {
-            var product = new Product
-            {
-                Id = id,
-                Name = request.Name,
-                Description = request.Description,
-                Price = request.Price
-            };
-            return productRepo.Update(product) ? Results.Ok(product) : Results.NotFound();
-        })
-        .WithValidation<UpdateProductRequest>();
+        return Results.Created($"/products/{product.Id}", product);
+    }
 
-        group.MapDelete("/{id}", (int id, IRandomProductRepository productRepo) =>
-            productRepo.Delete(id) ? Results.NoContent() : Results.NotFound());
+    private static async Task<IResult> UpdateProduct(int id, UpdateProductRequest request, IRepository<Product> repository)
+    {
+        var product = await repository.GetByIdAsync(id);
+        if (product is null)
+            return Results.NotFound();
+
+        product.Name = request.Name;
+        product.Description = request.Description;
+        product.Price = request.Price;
+
+        await repository.UpdateAsync(product);
+        await repository.SaveChangesAsync();
+
+        return Results.Ok(product);
+    }
+
+    private static async Task<IResult> DeleteProduct(int id, IRepository<Product> repository)
+    {
+        var deleted = await repository.RemoveAsync(id);
+        if (!deleted)
+            return Results.NotFound();
+
+        await repository.SaveChangesAsync();
+        return Results.NoContent();
     }
 }
