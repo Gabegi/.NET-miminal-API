@@ -1,5 +1,6 @@
 using Infrastructure.Entities;
 using Infrastructure.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using MinimalAPI.Extensions;
 using MinimalAPI.Models.Requests;
 
@@ -14,9 +15,14 @@ public static class OrdersEndpoints
         group.MapGet("/", GetAllOrders);
         group.MapGet("/{id}", GetOrderById);
         group.MapGet("/customer/{customerId}", GetOrdersByCustomer);
-        group.MapPost("/", CreateOrder).WithValidation<CreateOrderRequest>();
-        group.MapPut("/{id}", UpdateOrder).WithValidation<UpdateOrderRequest>();
-        group.MapDelete("/{id}", DeleteOrder);
+        group.MapPost("/", CreateOrder)
+            .WithValidation<CreateOrderRequest>()
+            .RequireAuthorization();
+        group.MapPut("/{id}", UpdateOrder)
+            .WithValidation<UpdateOrderRequest>()
+            .RequireAuthorization();
+        group.MapDelete("/{id}", DeleteOrder)
+            .RequireAuthorization("AdminOnly");
     }
 
     private static async Task<IResult> GetAllOrders(IRepository<Order> repository)

@@ -1,4 +1,4 @@
-namespace MinimalAPI.Configuration;
+namespace Infrastructure.Configuration;
 
 /// <summary>
 /// JWT configuration settings.

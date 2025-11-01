@@ -1,5 +1,6 @@
 ﻿using Infrastructure.Entities;
 using Infrastructure.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using MinimalAPI.Extensions;
 using MinimalAPI.Models.Requests;
 
@@ -13,9 +14,14 @@ public static class ProductsEndpoints
 
         group.MapGet("/", GetAllProducts);
         group.MapGet("/{id}", GetProductById);
-        group.MapPost("/", CreateProduct).WithValidation<CreateProductRequest>();
-        group.MapPut("/{id}", UpdateProduct).WithValidation<UpdateProductRequest>();
-        group.MapDelete("/{id}", DeleteProduct);
+        group.MapPost("/", CreateProduct)
+            .WithValidation<CreateProductRequest>()
+            .RequireAuthorization();
+        group.MapPut("/{id}", UpdateProduct)
+            .WithValidation<UpdateProductRequest>()
+            .RequireAuthorization();
+        group.MapDelete("/{id}", DeleteProduct)
+            .RequireAuthorization("AdminOnly");
     }
 
     private static async Task<IResult> GetAllProducts(IRepository<Product> repository)

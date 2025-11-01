@@ -10,10 +10,58 @@ public class DataSeeder
 {
     public void SeedData(ModelBuilder modelBuilder)
     {
+        SeedRoles(modelBuilder);
+        SeedUsers(modelBuilder);
         SeedProducts(modelBuilder);
         SeedCustomers(modelBuilder);
         SeedOrders(modelBuilder);
         SeedOrderItems(modelBuilder);
+    }
+
+    private static void SeedRoles(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Role>().HasData(
+            new Role { Id = 1, Name = "Admin", Description = "Administrator with full access" },
+            new Role { Id = 2, Name = "User", Description = "Regular user with read/write access" },
+            new Role { Id = 3, Name = "Guest", Description = "Guest with read-only access" }
+        );
+    }
+
+    private static void SeedUsers(ModelBuilder modelBuilder)
+    {
+        // Default admin password: "Admin@123"
+        var adminPasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123");
+        // Default user password: "User@123"
+        var userPasswordHash = BCrypt.Net.BCrypt.HashPassword("User@123");
+
+        modelBuilder.Entity<User>().HasData(
+            new User
+            {
+                Id = 1,
+                Username = "admin",
+                Email = "admin@example.com",
+                PasswordHash = adminPasswordHash,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                LastLogin = null
+            },
+            new User
+            {
+                Id = 2,
+                Username = "user",
+                Email = "user@example.com",
+                PasswordHash = userPasswordHash,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                LastLogin = null
+            }
+        );
+
+        // Assign roles (many-to-many)
+        modelBuilder.Entity("UserRoles").HasData(
+            new { UserId = 1, RoleId = 1 },  // admin -> Admin role
+            new { UserId = 2, RoleId = 2 }   // user -> User role
+        );
     }
 
     private static void SeedProducts(ModelBuilder modelBuilder)
