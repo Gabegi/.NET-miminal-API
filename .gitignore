@@ -11,6 +11,9 @@
 bin/
 obj/
 
+# Claude
+.claude/
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
