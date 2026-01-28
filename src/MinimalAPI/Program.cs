@@ -10,9 +10,27 @@ using Microsoft.EntityFrameworkCore;
 using MinimalAPI.Configuration;
 using MinimalAPI.Endpoints;
 using MinimalAPI.Extensions;
+using Serilog;
+using Serilog.Events;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog for structured logging
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .Enrich.FromLogContext()
+    .Enrich.WithEnvironmentUserName()
+    .Enrich.WithMachineName()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        path: "logs/app-.txt",
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 // Add User Secrets in development
 if (builder.Environment.IsDevelopment())
@@ -27,6 +45,44 @@ builder.Services.Configure<CorsSettings>(builder.Configuration.GetSection(CorsSe
 
 // Configure JWT settings
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
+
+// Configure Hybrid Caching (L1 in-memory + L2 Redis)
+var cacheSettings = new CacheSettings();
+builder.Configuration.GetSection(CacheSettings.SectionName).Bind(cacheSettings);
+builder.Services.Configure<CacheSettings>(builder.Configuration.GetSection(CacheSettings.SectionName));
+
+if (cacheSettings.Enabled)
+{
+    builder.Services.AddHybridCache(options =>
+    {
+        options.MaximumPayloadBytes = cacheSettings.MaxPayloadBytes;
+        options.MaximumKeyLength = cacheSettings.MaxKeyLength;
+
+        // Default expiration for all cache entries
+        options.DefaultEntryOptions = new HybridCacheEntryOptions
+        {
+            Expiration = TimeSpan.FromMinutes(10),
+            LocalCacheExpiration = TimeSpan.FromMinutes(10 * cacheSettings.L1ToL2Ratio)
+        };
+    });
+
+    // Use Redis for L2 cache if connection string is configured
+    if (!string.IsNullOrEmpty(cacheSettings.RedisConnectionString))
+    {
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = cacheSettings.RedisConnectionString;
+        });
+    }
+
+    Log.Information("Hybrid caching enabled | Redis: {RedisEnabled} | L1/L2 Ratio: {Ratio}",
+        !string.IsNullOrEmpty(cacheSettings.RedisConnectionString) ? "Yes" : "No (L1 only)",
+        cacheSettings.L1ToL2Ratio);
+}
+else
+{
+    Log.Warning("Caching is disabled globally");
+}
 
 // Register DbContext
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -155,6 +211,9 @@ if (app.Environment.IsDevelopment())
         options.DocumentTitle = "Minimal API - OpenAPI Documentation";
     });
 }
+
+// Request/response logging middleware
+app.UseRequestResponseLogging();
 
 // Use CORS middleware
 app.UseCors(corsSettings.PolicyName);

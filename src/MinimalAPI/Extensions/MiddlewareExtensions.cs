@@ -14,4 +14,12 @@ public static class MiddlewareExtensions
     {
         return app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
     }
+
+    /// <summary>
+    /// Adds request/response logging middleware for structured HTTP logging.
+    /// </summary>
+    public static IApplicationBuilder UseRequestResponseLogging(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<RequestResponseLoggingMiddleware>();
+    }
 }
