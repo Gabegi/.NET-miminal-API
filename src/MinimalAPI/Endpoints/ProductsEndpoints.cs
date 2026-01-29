@@ -1,8 +1,12 @@
-﻿using Infrastructure.Entities;
+using Infrastructure.Entities;
 using Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Options;
+using MinimalAPI.Configuration;
 using MinimalAPI.Extensions;
 using MinimalAPI.Models.Requests;
+using MinimalAPI.Utilities;
 
 namespace MinimalAPI.Endpoints;
 
@@ -52,19 +56,43 @@ public static class ProductsEndpoints
             .Produces(StatusCodes.Status404NotFound);
     }
 
-    private static async Task<IResult> GetAllProducts(IRepository<Product> repository)
+    private static async Task<IResult> GetAllProducts(
+        IRepository<Product> repository,
+        HybridCache cache,
+        IOptions<CacheSettings> cacheSettings)
     {
-        var products = await repository.GetAllAsync();
+        var products = await cache.GetOrCreateAsync(
+            CacheKeyBuilder.ProductsAll(),
+            async cancel => await repository.GetAllAsync(),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(cacheSettings.Value.Ttl.ProductsListMinutes)
+            });
+
         return Results.Ok(products);
     }
 
-    private static async Task<IResult> GetProductById(int id, IRepository<Product> repository)
+    private static async Task<IResult> GetProductById(
+        int id,
+        IRepository<Product> repository,
+        HybridCache cache,
+        IOptions<CacheSettings> cacheSettings)
     {
-        var product = await repository.GetByIdAsync(id);
+        var product = await cache.GetOrCreateAsync(
+            CacheKeyBuilder.ProductById(id),
+            async cancel => await repository.GetByIdAsync(id),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(cacheSettings.Value.Ttl.ProductsItemMinutes)
+            });
+
         return product is not null ? Results.Ok(product) : Results.NotFound();
     }
 
-    private static async Task<IResult> CreateProduct(CreateProductRequest request, IRepository<Product> repository)
+    private static async Task<IResult> CreateProduct(
+        CreateProductRequest request,
+        IRepository<Product> repository,
+        HybridCache cache)
     {
         var product = new Product
         {
@@ -76,10 +104,16 @@ public static class ProductsEndpoints
         await repository.AddAsync(product);
         await repository.SaveChangesAsync();
 
+        await cache.RemoveAsync(CacheKeyBuilder.ProductsAll());
+
         return Results.Created($"/products/{product.Id}", product);
     }
 
-    private static async Task<IResult> UpdateProduct(int id, UpdateProductRequest request, IRepository<Product> repository)
+    private static async Task<IResult> UpdateProduct(
+        int id,
+        UpdateProductRequest request,
+        IRepository<Product> repository,
+        HybridCache cache)
     {
         var product = await repository.GetByIdAsync(id);
         if (product is null)
@@ -92,16 +126,26 @@ public static class ProductsEndpoints
         await repository.UpdateAsync(product);
         await repository.SaveChangesAsync();
 
+        await cache.RemoveAsync(CacheKeyBuilder.ProductById(id));
+        await cache.RemoveAsync(CacheKeyBuilder.ProductsAll());
+
         return Results.Ok(product);
     }
 
-    private static async Task<IResult> DeleteProduct(int id, IRepository<Product> repository)
+    private static async Task<IResult> DeleteProduct(
+        int id,
+        IRepository<Product> repository,
+        HybridCache cache)
     {
         var deleted = await repository.RemoveAsync(id);
         if (!deleted)
             return Results.NotFound();
 
         await repository.SaveChangesAsync();
+
+        await cache.RemoveAsync(CacheKeyBuilder.ProductById(id));
+        await cache.RemoveAsync(CacheKeyBuilder.ProductsAll());
+
         return Results.NoContent();
     }
 }
