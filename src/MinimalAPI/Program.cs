@@ -51,38 +51,44 @@ var cacheSettings = new CacheSettings();
 builder.Configuration.GetSection(CacheSettings.SectionName).Bind(cacheSettings);
 builder.Services.Configure<CacheSettings>(builder.Configuration.GetSection(CacheSettings.SectionName));
 
-if (cacheSettings.Enabled)
+// Always register HybridCache so DI resolves in endpoints regardless of config
+builder.Services.AddHybridCache(options =>
 {
-    builder.Services.AddHybridCache(options =>
+    if (cacheSettings.Enabled)
     {
         options.MaximumPayloadBytes = cacheSettings.MaxPayloadBytes;
         options.MaximumKeyLength = cacheSettings.MaxKeyLength;
 
-        // Default expiration for all cache entries
         options.DefaultEntryOptions = new HybridCacheEntryOptions
         {
             Expiration = TimeSpan.FromMinutes(10),
             LocalCacheExpiration = TimeSpan.FromMinutes(10 * cacheSettings.L1ToL2Ratio)
         };
-    });
-
-    // Use Redis for L2 cache if connection string is configured
-    if (!string.IsNullOrEmpty(cacheSettings.RedisConnectionString))
-    {
-        builder.Services.AddStackExchangeRedisCache(options =>
-        {
-            options.Configuration = cacheSettings.RedisConnectionString;
-        });
     }
+    else
+    {
+        // Disabled: zero TTL acts as pass-through (no actual caching)
+        options.DefaultEntryOptions = new HybridCacheEntryOptions
+        {
+            Expiration = TimeSpan.Zero,
+            LocalCacheExpiration = TimeSpan.Zero
+        };
+    }
+});
 
-    Log.Information("Hybrid caching enabled | Redis: {RedisEnabled} | L1/L2 Ratio: {Ratio}",
-        !string.IsNullOrEmpty(cacheSettings.RedisConnectionString) ? "Yes" : "No (L1 only)",
-        cacheSettings.L1ToL2Ratio);
-}
-else
+// Use Redis for L2 cache if enabled and connection string is configured
+if (cacheSettings.Enabled && !string.IsNullOrEmpty(cacheSettings.RedisConnectionString))
 {
-    Log.Warning("Caching is disabled globally");
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = cacheSettings.RedisConnectionString;
+    });
 }
+
+Log.Information("Hybrid caching: {Status} | Redis: {RedisEnabled} | L1/L2 Ratio: {Ratio}",
+    cacheSettings.Enabled ? "Enabled" : "Disabled (pass-through)",
+    cacheSettings.Enabled && !string.IsNullOrEmpty(cacheSettings.RedisConnectionString) ? "Yes" : "No (L1 only)",
+    cacheSettings.L1ToL2Ratio);
 
 // Register DbContext
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
