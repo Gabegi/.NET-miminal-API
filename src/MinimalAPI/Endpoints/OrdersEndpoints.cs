@@ -1,8 +1,12 @@
 using Infrastructure.Entities;
 using Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Options;
+using MinimalAPI.Configuration;
 using MinimalAPI.Extensions;
 using MinimalAPI.Models.Requests;
+using MinimalAPI.Utilities;
 
 namespace MinimalAPI.Endpoints;
 
@@ -57,25 +61,60 @@ public static class OrdersEndpoints
             .Produces(StatusCodes.Status404NotFound);
     }
 
-    private static async Task<IResult> GetAllOrders(IRepository<Order> repository)
+    private static async Task<IResult> GetAllOrders(
+        IRepository<Order> repository,
+        HybridCache cache,
+        IOptions<CacheSettings> cacheSettings)
     {
-        var orders = await repository.GetAllAsync();
+        var orders = await cache.GetOrCreateAsync(
+            CacheKeyBuilder.OrdersAll(),
+            async cancel => await repository.GetAllAsync(),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(cacheSettings.Value.Ttl.OrdersListMinutes)
+            });
+
         return Results.Ok(orders);
     }
 
-    private static async Task<IResult> GetOrderById(int id, IRepository<Order> repository)
+    private static async Task<IResult> GetOrderById(
+        int id,
+        IRepository<Order> repository,
+        HybridCache cache,
+        IOptions<CacheSettings> cacheSettings)
     {
-        var order = await repository.GetByIdAsync(id);
+        var order = await cache.GetOrCreateAsync(
+            CacheKeyBuilder.OrderById(id),
+            async cancel => await repository.GetByIdAsync(id),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(cacheSettings.Value.Ttl.OrdersItemMinutes)
+            });
+
         return order is not null ? Results.Ok(order) : Results.NotFound();
     }
 
-    private static async Task<IResult> GetOrdersByCustomer(int customerId, IRepository<Order> repository)
+    private static async Task<IResult> GetOrdersByCustomer(
+        int customerId,
+        IRepository<Order> repository,
+        HybridCache cache,
+        IOptions<CacheSettings> cacheSettings)
     {
-        var orders = await repository.FindAsync(o => o.CustomerId == customerId);
+        var orders = await cache.GetOrCreateAsync(
+            CacheKeyBuilder.OrdersByCustomer(customerId),
+            async cancel => await repository.FindAsync(o => o.CustomerId == customerId),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(cacheSettings.Value.Ttl.OrdersByCustomerMinutes)
+            });
+
         return Results.Ok(orders);
     }
 
-    private static async Task<IResult> CreateOrder(CreateOrderRequest request, IRepository<Order> repository)
+    private static async Task<IResult> CreateOrder(
+        CreateOrderRequest request,
+        IRepository<Order> repository,
+        HybridCache cache)
     {
         var order = new Order
         {
@@ -86,14 +125,23 @@ public static class OrdersEndpoints
         await repository.AddAsync(order);
         await repository.SaveChangesAsync();
 
+        await cache.RemoveAsync(CacheKeyBuilder.OrdersAll());
+        await cache.RemoveAsync(CacheKeyBuilder.OrdersByCustomer(order.CustomerId));
+
         return Results.Created($"/orders/{order.Id}", order);
     }
 
-    private static async Task<IResult> UpdateOrder(int id, UpdateOrderRequest request, IRepository<Order> repository)
+    private static async Task<IResult> UpdateOrder(
+        int id,
+        UpdateOrderRequest request,
+        IRepository<Order> repository,
+        HybridCache cache)
     {
         var order = await repository.GetByIdAsync(id);
         if (order is null)
             return Results.NotFound();
+
+        var oldCustomerId = order.CustomerId;
 
         order.CustomerId = request.CustomerId;
         order.Items = request.Items;
@@ -101,16 +149,34 @@ public static class OrdersEndpoints
         await repository.UpdateAsync(order);
         await repository.SaveChangesAsync();
 
+        await cache.RemoveAsync(CacheKeyBuilder.OrderById(id));
+        await cache.RemoveAsync(CacheKeyBuilder.OrdersAll());
+        await cache.RemoveAsync(CacheKeyBuilder.OrdersByCustomer(oldCustomerId));
+
+        if (oldCustomerId != request.CustomerId)
+            await cache.RemoveAsync(CacheKeyBuilder.OrdersByCustomer(request.CustomerId));
+
         return Results.Ok(order);
     }
 
-    private static async Task<IResult> DeleteOrder(int id, IRepository<Order> repository)
+    private static async Task<IResult> DeleteOrder(
+        int id,
+        IRepository<Order> repository,
+        HybridCache cache)
     {
-        var deleted = await repository.RemoveAsync(id);
-        if (!deleted)
+        var order = await repository.GetByIdAsync(id);
+        if (order is null)
             return Results.NotFound();
 
+        var customerId = order.CustomerId;
+
+        await repository.RemoveAsync(order);
         await repository.SaveChangesAsync();
+
+        await cache.RemoveAsync(CacheKeyBuilder.OrderById(id));
+        await cache.RemoveAsync(CacheKeyBuilder.OrdersAll());
+        await cache.RemoveAsync(CacheKeyBuilder.OrdersByCustomer(customerId));
+
         return Results.NoContent();
     }
 }
