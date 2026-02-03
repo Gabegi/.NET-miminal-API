@@ -113,17 +113,28 @@ public static class OrdersEndpoints
 
     private static async Task<IResult> CreateOrder(
         CreateOrderRequest request,
-        IRepository<Order> repository,
+        IRepository<Order> orderRepository,
+        IRepository<Customer> customerRepository,
+        IRepository<Product> productRepository,
         HybridCache cache)
     {
+        var customer = await customerRepository.GetByIdAsync(request.CustomerId);
+        if (customer is null)
+            return Results.BadRequest(new { error = $"Customer with ID {request.CustomerId} not found." });
+
+        var items = await BuildOrderItems(request.Items, productRepository);
+        if (items is null)
+            return Results.BadRequest(new { error = "One or more product IDs are invalid." });
+
         var order = new Order
         {
             CustomerId = request.CustomerId,
-            Items = request.Items
+            OrderDate = DateTime.UtcNow,
+            Items = items
         };
 
-        await repository.AddAsync(order);
-        await repository.SaveChangesAsync();
+        await orderRepository.AddAsync(order);
+        await orderRepository.SaveChangesAsync();
 
         await cache.RemoveAsync(CacheKeyBuilder.OrdersAll());
         await cache.RemoveAsync(CacheKeyBuilder.OrdersByCustomer(order.CustomerId));
@@ -134,20 +145,30 @@ public static class OrdersEndpoints
     private static async Task<IResult> UpdateOrder(
         int id,
         UpdateOrderRequest request,
-        IRepository<Order> repository,
+        IRepository<Order> orderRepository,
+        IRepository<Customer> customerRepository,
+        IRepository<Product> productRepository,
         HybridCache cache)
     {
-        var order = await repository.GetByIdAsync(id);
+        var order = await orderRepository.GetByIdAsync(id);
         if (order is null)
             return Results.NotFound();
+
+        var customer = await customerRepository.GetByIdAsync(request.CustomerId);
+        if (customer is null)
+            return Results.BadRequest(new { error = $"Customer with ID {request.CustomerId} not found." });
+
+        var items = await BuildOrderItems(request.Items, productRepository);
+        if (items is null)
+            return Results.BadRequest(new { error = "One or more product IDs are invalid." });
 
         var oldCustomerId = order.CustomerId;
 
         order.CustomerId = request.CustomerId;
-        order.Items = request.Items;
+        order.Items = items;
 
-        await repository.UpdateAsync(order);
-        await repository.SaveChangesAsync();
+        await orderRepository.UpdateAsync(order);
+        await orderRepository.SaveChangesAsync();
 
         await cache.RemoveAsync(CacheKeyBuilder.OrderById(id));
         await cache.RemoveAsync(CacheKeyBuilder.OrdersAll());
@@ -178,5 +199,28 @@ public static class OrdersEndpoints
         await cache.RemoveAsync(CacheKeyBuilder.OrdersByCustomer(customerId));
 
         return Results.NoContent();
+    }
+
+    private static async Task<List<OrderItem>?> BuildOrderItems(
+        List<OrderItem> requestItems,
+        IRepository<Product> productRepository)
+    {
+        var items = new List<OrderItem>();
+
+        foreach (var item in requestItems)
+        {
+            var product = await productRepository.GetByIdAsync(item.ProductId);
+            if (product is null)
+                return null;
+
+            items.Add(new OrderItem
+            {
+                ProductId = item.ProductId,
+                Quantity = item.Quantity,
+                UnitPrice = product.Price
+            });
+        }
+
+        return items;
     }
 }
