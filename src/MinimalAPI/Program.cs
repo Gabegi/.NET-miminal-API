@@ -96,6 +96,15 @@ Log.Information("Hybrid caching: {Status} | Redis: {RedisEnabled} | L1/L2 Ratio:
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Register health checks
+var healthChecks = builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ApplicationDbContext>("database", tags: new[] { "ready" });
+
+if (cacheSettings.Enabled && !string.IsNullOrEmpty(cacheSettings.RedisConnectionString))
+{
+    healthChecks.AddRedis(cacheSettings.RedisConnectionString, name: "redis", tags: new[] { "ready" });
+}
+
 // Register generic repositories
 builder.Services.AddScoped<IRepository<Product>, Repository<Product>>();
 builder.Services.AddScoped<IRepository<Customer>, Repository<Customer>>();
