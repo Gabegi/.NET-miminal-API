@@ -13,6 +13,8 @@ using MinimalAPI.Extensions;
 using Serilog;
 using Serilog.Events;
 using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
